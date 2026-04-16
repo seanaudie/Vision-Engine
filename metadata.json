@@ -1,0 +1,5 @@
+{
+  "name": "Gesture & Face Vision",
+  "description": "An application for real-time facial recognition and hand gesture detection.",
+  "requestFramePermissions": ["camera"]
+}
