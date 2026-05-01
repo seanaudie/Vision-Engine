@@ -127,14 +127,13 @@ export default function CameraView({onHome}: {onHome: () => void}) {
         if (handLandmarker && isHandEnabled) {
           const handResults = handLandmarker.detectForVideo(video, performance.now());
           if (handResults.landmarks) {
-            // Mirror all landmarks first
-            const mirroredLandmarksList = isMirrored
+            // Recognize ASL letter from the original (possibly mirrored if desired, keep as is for ASL)
+            const aslLandmarks = isMirrored
               ? handResults.landmarks.map(hand => hand.map(lm => ({...lm, x: 1 - lm.x})))
               : handResults.landmarks;
 
-            // Recognize ASL letter from the first hand
-            if (isASLEnabled && mirroredLandmarksList.length > 0) {
-              recognizedLetterRef.current = classifyASL(mirroredLandmarksList[0]);
+            if (isASLEnabled && aslLandmarks.length > 0) {
+              recognizedLetterRef.current = classifyASL(aslLandmarks[0]);
             } else {
               recognizedLetterRef.current = null;
             }
@@ -146,12 +145,15 @@ export default function CameraView({onHome}: {onHome: () => void}) {
               ctx!.fillText(`Letter: ${recognizedLetterRef.current}`, 50, 50);
             }
 
-            // Draw connections between hands
-            if (mirroredLandmarksList.length >= 2) {
-              const hand1 = mirroredLandmarksList[0];
-              const hand2 = mirroredLandmarksList[1];
+            // Draw connections between hands using raw landmarks for canvas
+            // Use handResults.landmarks directly if CSS mirroring handles the flip
+            const drawingLandmarks = handResults.landmarks;
+
+            if (drawingLandmarks.length >= 2) {
+              const hand1 = drawingLandmarks[0];
+              const hand2 = drawingLandmarks[1];
               
-              // Gesture detection for closing hands
+              // Gesture detection (invariant to x-reflection)
               const isHand1Closed = Math.sqrt(
                 Math.pow(hand1[8].x - hand1[4].x, 2) + Math.pow(hand1[8].y - hand1[4].y, 2)
               ) < 0.05;
@@ -162,7 +164,6 @@ export default function CameraView({onHome}: {onHome: () => void}) {
               if (isHand1Closed || isHand2Closed) {
                 linkedFingersRef.current = [];
               } else {
-                // Update linked fingers if not already linked
                 if (linkedFingersRef.current.length === 0) {
                   const newLinkedFingers: number[] = [];
                   for (let i = 0; i < 21; i++) {
@@ -197,7 +198,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
               linkedFingersRef.current = [];
             }
 
-            for (const landmarks of mirroredLandmarksList) {
+            for (const landmarks of drawingLandmarks) {
               drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
                 color: '#00FF00',
                 lineWidth: 2
