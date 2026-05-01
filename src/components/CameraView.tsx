@@ -8,7 +8,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
   const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
   const [isMirrored, setIsMirrored] = useState(true);
-  const [linkedFingers, setLinkedFingers] = useState<number[]>([]);
+  const linkedFingersRef = useRef<number[]>([]);
   const recognizedLetterRef = useRef<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isASLEnabled, setIsASLEnabled] = useState(false);
@@ -160,10 +160,10 @@ export default function CameraView({onHome}: {onHome: () => void}) {
               ) < 0.05;
 
               if (isHand1Closed || isHand2Closed) {
-                setLinkedFingers([]);
+                linkedFingersRef.current = [];
               } else {
                 // Update linked fingers if not already linked
-                if (linkedFingers.length === 0) {
+                if (linkedFingersRef.current.length === 0) {
                   const newLinkedFingers: number[] = [];
                   for (let i = 0; i < 21; i++) {
                     const h1 = hand1[i];
@@ -173,12 +173,12 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                       newLinkedFingers.push(i);
                     }
                   }
-                  setLinkedFingers(newLinkedFingers);
+                  linkedFingersRef.current = newLinkedFingers;
                 }
               }
 
               ctx!.lineWidth = 4;
-              linkedFingers.forEach(i => {
+              linkedFingersRef.current.forEach(i => {
                 const h1 = hand1[i];
                 const h2 = hand2[i];
                 
@@ -194,7 +194,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                 ctx!.stroke();
               });
             } else {
-              setLinkedFingers([]);
+              linkedFingersRef.current = [];
             }
 
             for (const landmarks of mirroredLandmarksList) {
@@ -278,7 +278,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [handLandmarker, faceLandmarker, isMirrored, linkedFingers, isASLEnabled, isHandEnabled, isFaceEnabled, isEyeEnabled]);
+  }, [handLandmarker, faceLandmarker, isMirrored, isASLEnabled, isHandEnabled, isFaceEnabled, isEyeEnabled]);
 
   return (
     <div className="relative w-full h-screen bg-black">
