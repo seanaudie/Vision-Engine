@@ -16,15 +16,12 @@ export default function App() {
     <main className="min-h-screen bg-black text-white font-sans overflow-hidden">
       {mode === 'idle' && (
         <div className="relative flex flex-col items-center justify-center min-h-screen p-6 text-center">
-          {/* Epic Background Art */}
-          <div className="absolute inset-0 z-0 opacity-20">
-            <img
-              src="https://picsum.photos/seed/vision/1920/1080?blur=10"
-              alt="Computer Vision Abstract"
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-black" />
+          {/* Artistic Background */}
+          <div className="absolute inset-0 z-0 bg-black">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(6,182,212,0.2),_transparent_70%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,_rgba(168,85,247,0.2),_transparent_50%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,_rgba(59,130,246,0.2),_transparent_50%)]" />
+            <div className="absolute inset-0 bg-black/40" />
           </div>
 
           <motion.div className="relative z-10">
