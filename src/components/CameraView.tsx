@@ -9,7 +9,6 @@ export default function CameraView({onHome}: {onHome: () => void}) {
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
   const [isMirrored, setIsMirrored] = useState(true);
   const linkedFingersRef = useRef<number[]>([]);
-  const lineDashOffsetRef = useRef(0);
   const recognizedLetterRef = useRef<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isASLEnabled, setIsASLEnabled] = useState(false);
@@ -18,6 +17,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
   const [isEyeEnabled, setIsEyeEnabled] = useState(false);
   const [eyeState, setEyeState] = useState('Open');
   const [detectedLetter, setDetectedLetter] = useState<string | null>(null);
+  const [detectedFaceStates, setDetectedFaceStates] = useState<any[]>([]);
   const closedFramesRef = useRef(0);
 
   // Helper to calculate Euclidean distance
@@ -73,7 +73,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 2
+          numHands: 4
         });
         const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
@@ -81,7 +81,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numFaces: 1
+          numFaces: 4
         });
         if (isMounted) {
           setHandLandmarker(landmarker);
@@ -130,11 +130,14 @@ export default function CameraView({onHome}: {onHome: () => void}) {
           const handResults = handLandmarker.detectForVideo(video, performance.now());
           if (handResults.landmarks && handResults.landmarks.length > 0) {
             
-            // Recognize ASL letter
+            // Recognize ASL letters for all hands
             if (isASLEnabled && handResults.landmarks.length > 0) {
-              const handedness = handResults.handedness?.[0]?.[0]?.categoryName;
-              const letter = classifyASL(handResults.landmarks[0], handedness);
-              setDetectedLetter(prev => prev !== letter ? letter : prev);
+              const letters = handResults.landmarks.map((landmarks, index) => {
+                const handedness = handResults.handedness?.[index]?.[0]?.categoryName;
+                return classifyASL(landmarks, handedness);
+              }).filter(l => l !== null).join(', ');
+              
+              setDetectedLetter(prev => prev !== letters ? (letters || null) : prev);
             } else {
               setDetectedLetter(null);
             }
@@ -177,11 +180,8 @@ export default function CameraView({onHome}: {onHome: () => void}) {
               ctx!.lineCap = 'round';
               ctx!.shadowBlur = 20;
               
-              lineDashOffsetRef.current = (lineDashOffsetRef.current + 1) % 20;
-              ctx!.setLineDash([10, 10]);
-              ctx!.lineDashOffset = -lineDashOffsetRef.current;
-
-              const futuristicColors = ['#6366f1', '#a855f7', '#ec4899', '#22d3ee', '#10b981'];
+              const time = Date.now() / 150;
+              const uniformColor = '#172554';
 
               linkedFingersRef.current.forEach((i, idx) => {
                 const h1 = hand1[i];
@@ -191,16 +191,23 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                 const y1 = h1.y * canvas.height;
                 const x2 = h2.x * canvas.width;
                 const y2 = h2.y * canvas.height;
+
+                // Omniversal non-linear movement
+                const pos = (Math.sin(time * 0.8 + idx * 0.3) * Math.cos(time * 0.5 - idx * 0.2) + 1) / 2;
+                
+                const gradient = ctx!.createLinearGradient(x1, y1, x2, y2);
+                gradient.addColorStop(0, uniformColor);
+                gradient.addColorStop(pos, '#ffffff'); // Brighter spot moving sequentially
+                gradient.addColorStop(1, uniformColor);
                 
                 ctx!.beginPath();
-                ctx!.strokeStyle = futuristicColors[idx % futuristicColors.length];
-                ctx!.shadowColor = ctx!.strokeStyle;
+                ctx!.strokeStyle = gradient;
+                ctx!.shadowColor = uniformColor;
                 ctx!.moveTo(x1, y1);
                 ctx!.lineTo(x2, y2);
                 ctx!.stroke();
               });
               
-              ctx!.setLineDash([]); // Reset dash for subsequent drawing
               ctx!.shadowBlur = 0; // Reset shadow blur
               ctx!.shadowColor = 'transparent'; // Reset shadow color
             } else {
@@ -232,43 +239,74 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                 });
               }
 
-                // Eye tracking
-                if (isEyeEnabled) {
-                  const leftEyeIndices = [33, 160, 158, 133, 153, 144];
-                  const rightEyeIndices = [263, 387, 385, 362, 380, 373];
-                  
-                  // Helper to draw eye box
-                  const drawEyeBox = (eyeIndices: number[]) => {
-                    const eyePoints = eyeIndices.map(i => landmarks[i]);
-                    const minX = Math.min(...eyePoints.map(p => p.x)) * canvas.width;
-                    const maxX = Math.max(...eyePoints.map(p => p.x)) * canvas.width;
-                    const minY = Math.min(...eyePoints.map(p => p.y)) * canvas.height;
-                    const maxY = Math.max(...eyePoints.map(p => p.y)) * canvas.height;
-                    ctx!.strokeStyle = 'cyan';
-                    ctx!.lineWidth = 2;
-                    ctx!.strokeRect(minX - 5, minY - 5, (maxX - minX) + 10, (maxY - minY) + 10);
-                  };
-                  
-                  drawEyeBox(leftEyeIndices);
-                  drawEyeBox(rightEyeIndices);
+              // Mood heuristic
+              const getMood = (landmarks: any[], avgEAR: number) => {
+                // Face height for normalization
+                const faceHeight = Math.abs(landmarks[10].y - landmarks[152].y);
+                
+                const mouthLeft = landmarks[61];
+                const mouthRight = landmarks[291];
+                const mouthTop = landmarks[13];
+                const mouthBottom = landmarks[14];
+                const leftBrow = landmarks[70];
+                const rightBrow = landmarks[300];
+                const eyesMidY = (landmarks[33].y + landmarks[263].y) / 2;
+                
+                const mouthWidth = Math.abs(mouthRight.x - mouthLeft.x);
+                const mouthVerticalOpening = Math.abs(mouthBottom.y - mouthTop.y);
+                
+                // Normalized metrics
+                const mouthSmile = ((mouthLeft.y + mouthRight.y) / 2 - mouthTop.y) / faceHeight;
+                const mouthOpeningRatio = (mouthVerticalOpening / mouthWidth);
+                const browHeight = ((leftBrow.y + rightBrow.y) / 2 - eyesMidY) / faceHeight;
 
-                  const leftEAR = getEAR(landmarks, leftEyeIndices);
-                  const rightEAR = getEAR(landmarks, rightEyeIndices);
-                  const avgEAR = (leftEAR + rightEAR) / 2;
+                // Mood detection logic
+                if (avgEAR < 0.20 && mouthSmile > 0.01) return 'Crying'; // Sad + Eyes Closed
+                if (mouthSmile < -0.02 && mouthOpeningRatio > 0.4) return 'Excited';
+                if (mouthOpeningRatio > 0.5 && avgEAR > 0.3) return 'Shocked';
+                if (mouthSmile < -0.01) return 'Happy';
+                if (mouthSmile > 0.02) return 'Sad';
+                if (browHeight < 0.003 && mouthOpeningRatio < 0.2) return 'Angry';
+                
+                return 'Normal';
+              };
 
-                  if (avgEAR < 0.2) {
-                    closedFramesRef.current++;
-                  } else {
-                    closedFramesRef.current = 0;
-                    setEyeState(prev => prev !== 'Open' ? 'Open' : prev);
-                  }
+              // Eye tracking
+              if (isEyeEnabled) {
+                const leftEyeIndices = [33, 160, 158, 133, 153, 144];
+                const rightEyeIndices = [263, 387, 385, 362, 380, 373];
+                
+                // Helper to draw eye box
+                const drawEyeBox = (eyeIndices: number[]) => {
+                  const eyePoints = eyeIndices.map(i => landmarks[i]);
+                  const minX = Math.min(...eyePoints.map(p => p.x)) * canvas.width;
+                  const maxX = Math.max(...eyePoints.map(p => p.x)) * canvas.width;
+                  const minY = Math.min(...eyePoints.map(p => p.y)) * canvas.height;
+                  const maxY = Math.max(...eyePoints.map(p => p.y)) * canvas.height;
+                  ctx!.strokeStyle = 'cyan';
+                  ctx!.lineWidth = 2;
+                  ctx!.strokeRect(minX - 5, minY - 5, (maxX - minX) + 10, (maxY - minY) + 10);
+                };
+                
+                drawEyeBox(leftEyeIndices);
+                drawEyeBox(rightEyeIndices);
+              }
 
-                  if (closedFramesRef.current > 90) { // 3 seconds at 30fps
-                    setEyeState(prev => prev !== 'Sleeping' ? 'Sleeping' : prev);
-                  } else if (closedFramesRef.current > 0) {
-                    setEyeState(prev => prev !== 'Closed' ? 'Closed' : prev);
-                  }
-                }
+              // Eye state calculation
+              const leftEAR = getEAR(landmarks, [33, 160, 158, 133, 153, 144]);
+              const rightEAR = getEAR(landmarks, [263, 387, 385, 362, 380, 373]);
+              const avgEAR = (leftEAR + rightEAR) / 2;
+              
+              const mood = getMood(landmarks, avgEAR);
+              const finalMood = avgEAR < 0.18 ? 'Crying' : mood;
+
+              // Store state for UI correctly by face index
+              setDetectedFaceStates(prev => {
+                const faceIndex = faceResults.faceLandmarks.indexOf(landmarks);
+                const newState = [...prev];
+                newState[faceIndex] = { mood: isFaceEnabled ? finalMood : 'N/A', eyeState: avgEAR < 0.23 ? 'Closed' : 'Open' };
+                return newState;
+              });
             }
           }
         }
@@ -292,12 +330,26 @@ export default function CameraView({onHome}: {onHome: () => void}) {
 
   return (
     <div className="relative w-full h-screen bg-black">
-      {isASLEnabled && detectedLetter && (
-        <div className="absolute top-6 left-6 z-10 bg-black/60 backdrop-blur-md rounded-2xl p-6 border border-white/10 text-white flex items-center gap-4 shadow-2xl">
-          <span className="text-sm font-medium tracking-wide uppercase text-white/70">Detected</span>
-          <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-400 to-cyan-400">
-            {detectedLetter}
-          </span>
+      {( (isASLEnabled && detectedLetter) || ((isFaceEnabled || isEyeEnabled) && detectedFaceStates.length > 0) ) && (
+        <div className="absolute top-6 left-6 z-10 bg-black/60 backdrop-blur-md rounded-2xl p-6 border border-white/10 text-white flex flex-col gap-2 shadow-2xl">
+          {isASLEnabled && detectedLetter && (
+             <div className='flex items-center gap-4'>
+               <span className="text-sm font-medium tracking-wide uppercase text-white/70">Detected</span>
+               <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-400 to-cyan-400">
+                 {detectedLetter}
+               </span>
+             </div>
+          )}
+          {(isFaceEnabled || isEyeEnabled) && detectedFaceStates.length > 0 && (
+             <div className={`pt-2 border-t border-white/10 text-sm md:text-lg ${isASLEnabled && detectedLetter ? '' : 'border-t-0 pt-0'}`}>
+                {detectedFaceStates.map((state, i) => state && (
+                   <div key={i} className="mb-1">
+                      {isFaceEnabled && <p>Face {i+1} - Mood: {state.mood}</p>}
+                      {isEyeEnabled && <p>Face {i+1} - Eyes: {state.eyeState}</p>}
+                   </div>
+                ))}
+             </div>
+          )}
         </div>
       )}
       <video 
