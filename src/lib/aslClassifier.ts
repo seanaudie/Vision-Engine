@@ -28,7 +28,12 @@ export function classifyASL(landmarks: Landmark[], handedness: string | undefine
   const ringExtended = isFingerExtended(normalizedLandmarks[16], normalizedLandmarks[13], normalizedLandmarks[0]);
   const pinkyExtended = isFingerExtended(normalizedLandmarks[20], normalizedLandmarks[17], normalizedLandmarks[0]);
 
-  // A: Fist (thumb tucked, fingers curled - also check for thumb)
+  // E: Fist (all curled, thumb tucked)
+  if (!isThumbExtended && !indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
+    return 'E';
+  }
+
+  // A: Fist (thumb slightly extended/tucked)
   if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
     return 'A';
   }
@@ -38,15 +43,50 @@ export function classifyASL(landmarks: Landmark[], handedness: string | undefine
     return 'B';
   }
 
-  // D: Index finger up, others curled
-  if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
-    return 'D';
+  // L: Index and thumb extended
+  if (isThumbExtended && indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
+      return 'L';
+  }
+
+  // C: Thumb slightly extended, index/middle/ring/pinky curled in a C shape
+  // C shape is often thumb and index extended curved
+  if (isThumbExtended && indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
+    return 'C';
   }
   
+  // W: Index, middle, ring extended
+  if (!isThumbExtended && indexExtended && middleExtended && ringExtended && !pinkyExtended) {
+      return 'W';
+  }
+
+  // K: Index extended, middle extended, thumb tucked
+  if (indexExtended && middleExtended && !isThumbExtended && !ringExtended && !pinkyExtended) {
+    return 'K';
+  }
+  
+  // O: Fingers curled tips touch (looks like all extended for now, but will return O)
+  // Actually hard to distinguish from B with this heuristic. Skipping for now.
+
+  // P: Index and middle finger (P shape)
+  if (isThumbExtended && indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
+      return 'P';
+  }
+
   // V: Index & middle up
   if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
       return 'V';
   }
+
+  // W: Index, middle, ring extended
+  if (!isThumbExtended && indexExtended && middleExtended && ringExtended && !pinkyExtended) {
+      return 'W';
+  }
+
+  // Y: Extended thumb and pinky
+  if (isThumbExtended && !indexExtended && !middleExtended && !ringExtended && pinkyExtended) {
+      return 'Y';
+  }
+
 
   return null;
 }

@@ -126,206 +126,126 @@ export default function CameraView({onHome}: {onHome: () => void}) {
         ctx!.clearRect(0, 0, canvas.width, canvas.height);
         const drawingUtils = new DrawingUtils(ctx!);
 
+        // 1. Hand Detection
         if (handLandmarker && isHandEnabled) {
           const handResults = handLandmarker.detectForVideo(video, performance.now());
-          if (handResults.landmarks && handResults.landmarks.length > 0) {
-            
-            // Recognize ASL letters for all hands
-            if (isASLEnabled && handResults.landmarks.length > 0) {
+          if (handResults.landmarks?.length > 0) {
+            if (isASLEnabled) {
               const letters = handResults.landmarks.map((landmarks, index) => {
                 const handedness = handResults.handedness?.[index]?.[0]?.categoryName;
                 return classifyASL(landmarks, handedness);
               }).filter(l => l !== null).join(', ');
-              
               setDetectedLetter(prev => prev !== letters ? (letters || null) : prev);
             } else {
               setDetectedLetter(null);
             }
 
-            // Draw connections between hands using raw landmarks for canvas
-            // Use handResults.landmarks directly if CSS mirroring handles the flip
-            const drawingLandmarks = handResults.landmarks;
-
-            if (drawingLandmarks.length >= 2) {
-              const hand1 = drawingLandmarks[0];
-              const hand2 = drawingLandmarks[1];
+            // Draw Hand Connections
+            if (handResults.landmarks.length >= 2) {
+              const hand1 = handResults.landmarks[0];
+              const hand2 = handResults.landmarks[1];
               
-              // Gesture detection (invariant to x-reflection)
-              const isHand1Closed = Math.sqrt(
-                Math.pow(hand1[8].x - hand1[4].x, 2) + Math.pow(hand1[8].y - hand1[4].y, 2)
-              ) < 0.05;
-              const isHand2Closed = Math.sqrt(
-                Math.pow(hand2[8].x - hand2[4].x, 2) + Math.pow(hand2[8].y - hand2[4].y, 2)
-              ) < 0.05;
+              const isHand1Closed = Math.sqrt(Math.pow(hand1[8].x - hand1[4].x, 2) + Math.pow(hand1[8].y - hand1[4].y, 2)) < 0.05;
+              const isHand2Closed = Math.sqrt(Math.pow(hand2[8].x - hand2[4].x, 2) + Math.pow(hand2[8].y - hand2[4].y, 2)) < 0.05;
 
               if (isHand1Closed || isHand2Closed) {
                 linkedFingersRef.current = [];
-              } else {
-                if (linkedFingersRef.current.length === 0) {
-                  const newLinkedFingers: number[] = [];
-                  for (let i = 0; i < 21; i++) {
-                    const h1 = hand1[i];
-                    const h2 = hand2[i];
-                    const dist = Math.sqrt(Math.pow(h1.x - h2.x, 2) + Math.pow(h1.y - h2.y, 2));
-                    if (dist < 0.2) {
-                      newLinkedFingers.push(i);
-                    }
-                  }
-                  linkedFingersRef.current = newLinkedFingers;
+              } else if (linkedFingersRef.current.length === 0) {
+                const newLinkedFingers: number[] = [];
+                for (let i = 0; i < 21; i++) {
+                  const dist = Math.sqrt(Math.pow(hand1[i].x - hand2[i].x, 2) + Math.pow(hand1[i].y - hand2[i].y, 2));
+                  if (dist < 0.2) newLinkedFingers.push(i);
                 }
+                linkedFingersRef.current = newLinkedFingers;
               }
 
-              // Line styling
-              ctx!.lineWidth = 10;
+              ctx!.lineWidth = 8;
               ctx!.lineCap = 'round';
-              ctx!.shadowBlur = 20;
-              
+              ctx!.shadowBlur = 15;
+              ctx!.shadowColor = '#ffffff';
               const time = Date.now() / 150;
-              const uniformColor = '#172554';
-
               linkedFingersRef.current.forEach((i, idx) => {
                 const h1 = hand1[i];
                 const h2 = hand2[i];
-                
-                const x1 = h1.x * canvas.width;
-                const y1 = h1.y * canvas.height;
-                const x2 = h2.x * canvas.width;
-                const y2 = h2.y * canvas.height;
-
-                // Omniversal non-linear movement
-                const pos = (Math.sin(time * 0.8 + idx * 0.3) * Math.cos(time * 0.5 - idx * 0.2) + 1) / 2;
-                
-                const gradient = ctx!.createLinearGradient(x1, y1, x2, y2);
-                gradient.addColorStop(0, uniformColor);
-                gradient.addColorStop(pos, '#ffffff'); // Brighter spot moving sequentially
-                gradient.addColorStop(1, uniformColor);
-                
+                const gradient = ctx!.createLinearGradient(h1.x * canvas.width, h1.y * canvas.height, h2.x * canvas.width, h2.y * canvas.height);
+                const offset = (Math.sin(time + idx) + 1) / 2;
+                gradient.addColorStop(0, '#9ca3af');
+                gradient.addColorStop(offset, '#ffffff');
+                gradient.addColorStop(1, '#9ca3af');
                 ctx!.beginPath();
                 ctx!.strokeStyle = gradient;
-                ctx!.shadowColor = uniformColor;
-                ctx!.moveTo(x1, y1);
-                ctx!.lineTo(x2, y2);
+                ctx!.moveTo(h1.x * canvas.width, h1.y * canvas.height);
+                ctx!.lineTo(h2.x * canvas.width, h2.y * canvas.height);
                 ctx!.stroke();
               });
-              
-              ctx!.shadowBlur = 0; // Reset shadow blur
-              ctx!.shadowColor = 'transparent'; // Reset shadow color
-            } else {
-              linkedFingersRef.current = [];
+              ctx!.shadowBlur = 0;
             }
 
-            for (const landmarks of drawingLandmarks) {
-              drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
-                color: '#00FF00',
-                lineWidth: 2
-              });
-              drawingUtils.drawLandmarks(landmarks, {
-                color: '#FF0000',
-                lineWidth: 1,
-                radius: 3
-              });
-            }
+            handResults.landmarks.forEach(landmarks => {
+              drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#9ca3af', lineWidth: 4});
+              drawingUtils.drawLandmarks(landmarks, {color: '#ffffff', lineWidth: 2, radius: 4});
+            });
+          } else {
+            linkedFingersRef.current = [];
           }
         }
 
+        // 2. Face/Eye Detection
         if (faceLandmarker && (isFaceEnabled || isEyeEnabled)) {
           const faceResults = faceLandmarker.detectForVideo(video, performance.now());
           if (faceResults.faceLandmarks) {
-            for (const landmarks of faceResults.faceLandmarks) {
+            faceResults.faceLandmarks.forEach(landmarks => {
               if (isFaceEnabled) {
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
-                  color: '#C0C0C070',
-                  lineWidth: 1
+                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#ffffff20', lineWidth: 0.5});
+              }
+              if (isEyeEnabled) {
+                [ [33, 160, 158, 133, 153, 144], [263, 387, 385, 362, 380, 373] ].forEach(eye => {
+                  const pts = eye.map(i => landmarks[i]);
+                  ctx!.strokeStyle = '#22d3ee';
+                  ctx!.lineWidth = 2;
+                  ctx!.strokeRect(Math.min(...pts.map(p => p.x)) * canvas.width - 5, Math.min(...pts.map(p => p.y)) * canvas.height - 5, (Math.max(...pts.map(p => p.x)) - Math.min(...pts.map(p => p.x))) * canvas.width + 10, (Math.max(...pts.map(p => p.y)) - Math.min(...pts.map(p => p.y))) * canvas.height + 10);
                 });
               }
+            });
 
-              // Mood heuristic
-              const getMood = (landmarks: any[], avgEAR: number) => {
-                // Face height for normalization
-                const faceHeight = Math.abs(landmarks[10].y - landmarks[152].y);
-                
-                const mouthLeft = landmarks[61];
-                const mouthRight = landmarks[291];
-                const mouthTop = landmarks[13];
-                const mouthBottom = landmarks[14];
-                const leftBrow = landmarks[70];
-                const rightBrow = landmarks[300];
-                const eyesMidY = (landmarks[33].y + landmarks[263].y) / 2;
-                
-                const mouthWidth = Math.abs(mouthRight.x - mouthLeft.x);
-                const mouthVerticalOpening = Math.abs(mouthBottom.y - mouthTop.y);
-                
-                // Normalized metrics
-                const mouthSmile = ((mouthLeft.y + mouthRight.y) / 2 - mouthTop.y) / faceHeight;
-                const mouthOpeningRatio = (mouthVerticalOpening / mouthWidth);
-                const browHeight = ((leftBrow.y + rightBrow.y) / 2 - eyesMidY) / faceHeight;
-
-                // Mood detection logic
-                if (avgEAR < 0.20 && mouthSmile > 0.01) return 'Crying'; // Sad + Eyes Closed
-                if (mouthSmile < -0.02 && mouthOpeningRatio > 0.4) return 'Excited';
-                if (mouthOpeningRatio > 0.5 && avgEAR > 0.3) return 'Shocked';
-                if (mouthSmile < -0.01) return 'Happy';
-                if (mouthSmile > 0.02) return 'Sad';
-                if (browHeight < 0.003 && mouthOpeningRatio < 0.2) return 'Angry';
-                
-                return 'Normal';
-              };
-
-              // Eye tracking
-              if (isEyeEnabled) {
-                const leftEyeIndices = [33, 160, 158, 133, 153, 144];
-                const rightEyeIndices = [263, 387, 385, 362, 380, 373];
-                
-                // Helper to draw eye box
-                const drawEyeBox = (eyeIndices: number[]) => {
-                  const eyePoints = eyeIndices.map(i => landmarks[i]);
-                  const minX = Math.min(...eyePoints.map(p => p.x)) * canvas.width;
-                  const maxX = Math.max(...eyePoints.map(p => p.x)) * canvas.width;
-                  const minY = Math.min(...eyePoints.map(p => p.y)) * canvas.height;
-                  const maxY = Math.max(...eyePoints.map(p => p.y)) * canvas.height;
-                  ctx!.strokeStyle = 'cyan';
-                  ctx!.lineWidth = 2;
-                  ctx!.strokeRect(minX - 5, minY - 5, (maxX - minX) + 10, (maxY - minY) + 10);
-                };
-                
-                drawEyeBox(leftEyeIndices);
-                drawEyeBox(rightEyeIndices);
-              }
-
-              // Eye state calculation
+            // Mood & Eye State
+            setDetectedFaceStates(faceResults.faceLandmarks.map((landmarks) => {
               const leftEAR = getEAR(landmarks, [33, 160, 158, 133, 153, 144]);
               const rightEAR = getEAR(landmarks, [263, 387, 385, 362, 380, 373]);
               const avgEAR = (leftEAR + rightEAR) / 2;
               
-              const mood = getMood(landmarks, avgEAR);
-              const finalMood = avgEAR < 0.18 ? 'Crying' : mood;
-
-              // Store state for UI correctly by face index
-              setDetectedFaceStates(prev => {
-                const faceIndex = faceResults.faceLandmarks.indexOf(landmarks);
-                const newState = [...prev];
-                newState[faceIndex] = { mood: isFaceEnabled ? finalMood : 'N/A', eyeState: avgEAR < 0.23 ? 'Closed' : 'Open' };
-                return newState;
-              });
-            }
+              const faceHeight = Math.abs(landmarks[10].y - landmarks[152].y);
+              const mouthTop = landmarks[13];
+              const mouthBottom = landmarks[14];
+              const mouthLeft = landmarks[61];
+              const mouthRight = landmarks[291];
+              const mouthVerticalOpening = Math.abs(mouthBottom.y - mouthTop.y);
+              const mouthWidth = Math.abs(mouthRight.x - mouthLeft.x);
+              
+              const mouthSmile = ((mouthLeft.y + mouthRight.y) / 2 - mouthTop.y) / faceHeight;
+              
+              let mood = 'Normal';
+              if (avgEAR < 0.20 && mouthSmile > 0.01) mood = 'Crying';                
+              else if (mouthSmile < -0.02 && (mouthVerticalOpening / mouthWidth) > 0.4) mood = 'Excited';
+              else if ((mouthVerticalOpening / mouthWidth) > 0.5 && avgEAR > 0.3) mood = 'Shocked';
+              else if (mouthSmile < -0.01) mood = 'Happy';
+              else if (mouthSmile > 0.02) mood = 'Sad';
+              
+              return { 
+                mood: isFaceEnabled ? (avgEAR < 0.18 ? 'Crying' : mood) : 'N/A', 
+                eyeState: avgEAR < 0.23 ? 'Closed' : 'Open' 
+              };
+            }));
+          } else {
+             setDetectedFaceStates([]);
           }
-        }
-        
-        // Draw eye state
-        if (isEyeEnabled) {
-          ctx!.font = '24px Arial';
-          ctx!.fillStyle = 'yellow';
-          ctx!.fillText(`Eye State: ${eyeState}`, 50, 100);
         }
       }
       animationFrameId = requestAnimationFrame(predict);
     }
 
     predict();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
+    return () => cancelAnimationFrame(animationFrameId);
   }, [handLandmarker, faceLandmarker, isMirrored, isASLEnabled, isHandEnabled, isFaceEnabled, isEyeEnabled]);
 
   return (
@@ -341,14 +261,19 @@ export default function CameraView({onHome}: {onHome: () => void}) {
              </div>
           )}
           {(isFaceEnabled || isEyeEnabled) && detectedFaceStates.length > 0 && (
-             <div className={`pt-2 border-t border-white/10 text-sm md:text-lg ${isASLEnabled && detectedLetter ? '' : 'border-t-0 pt-0'}`}>
-                {detectedFaceStates.map((state, i) => state && (
-                   <div key={i} className="mb-1">
-                      {isFaceEnabled && <p>Face {i+1} - Mood: {state.mood}</p>}
-                      {isEyeEnabled && <p>Face {i+1} - Eyes: {state.eyeState}</p>}
-                   </div>
-                ))}
-             </div>
+            <div className={`pt-2 border-t border-white/10 text-sm md:text-lg ${isASLEnabled && detectedLetter ? '' : 'border-t-0 pt-0'}`}>
+              {detectedFaceStates.map((state, i) => state && (
+                <div key={i} className="flex flex-col gap-0.5">
+                  {isFaceEnabled && (
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-white/70">Face {i + 1}</span>
+                        <span className="font-semibold tracking-wide text-white/90">{state.mood}</span>
+                    </div>
+                  )}
+                  {isEyeEnabled && <span className="text-xs text-white/60 ml-8">{state.eyeState}</span>}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -370,37 +295,18 @@ export default function CameraView({onHome}: {onHome: () => void}) {
           <p className="text-xl font-bold">{cameraError}</p>
         </div>
       )}
-      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 items-end">
-        <button 
-          onClick={() => setIsMirrored(!isMirrored)}
-          className="px-4 py-2 bg-gray-800 text-white rounded-full hover:bg-gray-700"
-        >
-          {isMirrored ? 'Unmirror Camera' : 'Mirror Camera'}
-        </button>
-        <button 
-          onClick={() => setIsHandEnabled(!isHandEnabled)}
-          className={`px-4 py-2 text-white rounded-full ${isHandEnabled ? 'bg-blue-600' : 'bg-gray-800'} hover:bg-opacity-80`}
-        >
-          {isHandEnabled ? 'Hand Enabled' : 'Hand Disabled'}
-        </button>
-        <button 
-          onClick={() => setIsASLEnabled(!isASLEnabled)}
-          className={`px-4 py-2 text-white rounded-full ${isASLEnabled ? 'bg-green-600' : 'bg-gray-800'} hover:bg-opacity-80`}
-        >
-          {isASLEnabled ? 'ASL Enabled' : 'ASL Disabled'}
-        </button>
-        <button 
-          onClick={() => setIsFaceEnabled(!isFaceEnabled)}
-          className={`px-4 py-2 text-white rounded-full ${isFaceEnabled ? 'bg-yellow-600' : 'bg-gray-800'} hover:bg-opacity-80`}
-        >
-          {isFaceEnabled ? 'Face Enabled' : 'Face Disabled'}
-        </button>
-        <button 
-          onClick={() => setIsEyeEnabled(!isEyeEnabled)}
-          className={`px-4 py-2 text-white rounded-full ${isEyeEnabled ? 'bg-orange-600' : 'bg-gray-800'} hover:bg-opacity-80`}
-        >
-          {isEyeEnabled ? 'Eye Enabled' : 'Eye Disabled'}
-        </button>
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-3">
+        {[
+          { label: isMirrored ? 'Unmirror Camera' : 'Mirror Camera', action: () => setIsMirrored(!isMirrored), active: true, color: 'bg-slate-700' },
+          { label: isHandEnabled ? 'Hand Enabled' : 'Hand Disabled', action: () => setIsHandEnabled(!isHandEnabled), active: isHandEnabled, color: 'bg-blue-600' },
+          { label: isASLEnabled ? 'ASL Enabled' : 'ASL Disabled', action: () => setIsASLEnabled(!isASLEnabled), active: isASLEnabled, color: 'bg-green-600' },
+          { label: isFaceEnabled ? 'Face Enabled' : 'Face Disabled', action: () => setIsFaceEnabled(!isFaceEnabled), active: isFaceEnabled, color: 'bg-yellow-600' },
+          { label: isEyeEnabled ? 'Eye Enabled' : 'Eye Disabled', action: () => setIsEyeEnabled(!isEyeEnabled), active: isEyeEnabled, color: 'bg-orange-600' },
+        ].map((btn, i) => (
+          <button key={i} onClick={btn.action} className={`px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 backdrop-blur-md shadow-lg ${btn.active ? btn.color : 'bg-black/40 hover:bg-black/60 border border-white/10'}`}>
+            {btn.label}
+          </button>
+        ))}
       </div>
       <button 
         onClick={onHome}
