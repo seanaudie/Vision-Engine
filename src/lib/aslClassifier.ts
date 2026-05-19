@@ -15,17 +15,20 @@ export function classifyASL(landmarks: Landmark[]): string | null {
     return distTip > distMcp;
   };
 
+  // Thumb extension (simplified, thumb is usually horizontal)
+  const isThumbExtended = landmarks[4].x > landmarks[2].x; // For right hand (needs adjustment for left/mirrored)
+
   const indexExtended = isFingerExtended(landmarks[8], landmarks[6], landmarks[5], landmarks[0]);
   const middleExtended = isFingerExtended(landmarks[12], landmarks[10], landmarks[9], landmarks[0]);
   const ringExtended = isFingerExtended(landmarks[16], landmarks[14], landmarks[13], landmarks[0]);
   const pinkyExtended = isFingerExtended(landmarks[20], landmarks[18], landmarks[17], landmarks[0]);
 
-  // A: Fist (thumb tucked, fingers curled)
+  // A: Fist (thumb tucked, fingers curled - also check for thumb)
   if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
     return 'A';
   }
 
-  // B: Flat hand (fingers extended, thumb tucked)
+  // B: Flat hand (fingers extended)
   if (indexExtended && middleExtended && ringExtended && pinkyExtended) {
     return 'B';
   }
@@ -33,6 +36,11 @@ export function classifyASL(landmarks: Landmark[]): string | null {
   // D: Index finger up, others curled
   if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
     return 'D';
+  }
+  
+  // V: Index & middle up
+  if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
+      return 'V';
   }
 
   return null;

@@ -16,6 +16,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
   const [isHandEnabled, setIsHandEnabled] = useState(true);
   const [isEyeEnabled, setIsEyeEnabled] = useState(false);
   const [eyeState, setEyeState] = useState('Open');
+  const [detectedLetter, setDetectedLetter] = useState<string | null>(null);
   const closedFramesRef = useRef(0);
 
   // Helper to calculate Euclidean distance
@@ -126,23 +127,18 @@ export default function CameraView({onHome}: {onHome: () => void}) {
 
         if (handLandmarker && isHandEnabled) {
           const handResults = handLandmarker.detectForVideo(video, performance.now());
-          if (handResults.landmarks) {
+          if (handResults.landmarks && handResults.landmarks.length > 0) {
+            
             // Recognize ASL letter from the original (possibly mirrored if desired, keep as is for ASL)
             const aslLandmarks = isMirrored
               ? handResults.landmarks.map(hand => hand.map(lm => ({...lm, x: 1 - lm.x})))
               : handResults.landmarks;
 
             if (isASLEnabled && aslLandmarks.length > 0) {
-              recognizedLetterRef.current = classifyASL(aslLandmarks[0]);
+              const letter = classifyASL(aslLandmarks[0]);
+              setDetectedLetter(prev => prev !== letter ? letter : prev);
             } else {
-              recognizedLetterRef.current = null;
-            }
-
-            // Draw recognized letter
-            if (isASLEnabled && recognizedLetterRef.current) {
-              ctx!.font = '48px Arial';
-              ctx!.fillStyle = 'white';
-              ctx!.fillText(`Letter: ${recognizedLetterRef.current}`, 50, 50);
+              setDetectedLetter(null);
             }
 
             // Draw connections between hands using raw landmarks for canvas
@@ -283,6 +279,14 @@ export default function CameraView({onHome}: {onHome: () => void}) {
 
   return (
     <div className="relative w-full h-screen bg-black">
+      {isASLEnabled && detectedLetter && (
+        <div className="absolute top-6 left-6 z-10 bg-black/60 backdrop-blur-md rounded-2xl p-6 border border-white/10 text-white flex items-center gap-4 shadow-2xl">
+          <span className="text-sm font-medium tracking-wide uppercase text-white/70">Detected</span>
+          <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-400 to-cyan-400">
+            {detectedLetter}
+          </span>
+        </div>
+      )}
       <video 
         ref={videoRef} 
         className={`w-full h-full object-cover ${isMirrored ? 'scale-x-[-1]' : ''}`} 
