@@ -1,6 +1,6 @@
 import { Landmark } from '@mediapipe/tasks-vision';
 
-export function classifyASL(landmarks: Landmark[]): string | null {
+export function classifyASL(landmarks: Landmark[], handedness: string | undefined): string | null {
   // Landmarks indices:
   // 0: wrist, 1: thumb_cmc, 2: thumb_mcp, 3: thumb_ip, 4: thumb_tip
   // 5: index_mcp, 6: index_pip, 7: index_dip, 8: index_tip
@@ -8,20 +8,25 @@ export function classifyASL(landmarks: Landmark[]): string | null {
   // 13: ring_mcp, 14: ring_pip, 15: ring_dip, 16: ring_tip
   // 17: pinky_mcp, 18: pinky_pip, 19: pinky_dip, 20: pinky_tip
 
-  const isFingerExtended = (tip: Landmark, pip: Landmark, mcp: Landmark, wrist: Landmark) => {
+  // Normalize landmarks to always be "Right-like"
+  const normalizedLandmarks = handedness === 'Left' 
+    ? landmarks.map(lm => ({...lm, x: 1 - lm.x}))                
+    : landmarks;
+
+  const isFingerExtended = (tip: Landmark, mcp: Landmark, wrist: Landmark) => {
     // Simple heuristic: distance from wrist to tip > distance from wrist to mcp
     const distTip = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
     const distMcp = Math.sqrt(Math.pow(mcp.x - wrist.x, 2) + Math.pow(mcp.y - wrist.y, 2));
     return distTip > distMcp;
   };
 
-  // Thumb extension (simplified, thumb is usually horizontal)
-  const isThumbExtended = landmarks[4].x > landmarks[2].x; // For right hand (needs adjustment for left/mirrored)
+  // Thumb extension (use distance from MCP)
+  const isThumbExtended = isFingerExtended(normalizedLandmarks[4], normalizedLandmarks[2], normalizedLandmarks[0]);
 
-  const indexExtended = isFingerExtended(landmarks[8], landmarks[6], landmarks[5], landmarks[0]);
-  const middleExtended = isFingerExtended(landmarks[12], landmarks[10], landmarks[9], landmarks[0]);
-  const ringExtended = isFingerExtended(landmarks[16], landmarks[14], landmarks[13], landmarks[0]);
-  const pinkyExtended = isFingerExtended(landmarks[20], landmarks[18], landmarks[17], landmarks[0]);
+  const indexExtended = isFingerExtended(normalizedLandmarks[8], normalizedLandmarks[5], normalizedLandmarks[0]);
+  const middleExtended = isFingerExtended(normalizedLandmarks[12], normalizedLandmarks[9], normalizedLandmarks[0]);
+  const ringExtended = isFingerExtended(normalizedLandmarks[16], normalizedLandmarks[13], normalizedLandmarks[0]);
+  const pinkyExtended = isFingerExtended(normalizedLandmarks[20], normalizedLandmarks[17], normalizedLandmarks[0]);
 
   // A: Fist (thumb tucked, fingers curled - also check for thumb)
   if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {

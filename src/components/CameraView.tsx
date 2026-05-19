@@ -9,6 +9,7 @@ export default function CameraView({onHome}: {onHome: () => void}) {
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
   const [isMirrored, setIsMirrored] = useState(true);
   const linkedFingersRef = useRef<number[]>([]);
+  const lineDashOffsetRef = useRef(0);
   const recognizedLetterRef = useRef<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isASLEnabled, setIsASLEnabled] = useState(false);
@@ -129,13 +130,10 @@ export default function CameraView({onHome}: {onHome: () => void}) {
           const handResults = handLandmarker.detectForVideo(video, performance.now());
           if (handResults.landmarks && handResults.landmarks.length > 0) {
             
-            // Recognize ASL letter from the original (possibly mirrored if desired, keep as is for ASL)
-            const aslLandmarks = isMirrored
-              ? handResults.landmarks.map(hand => hand.map(lm => ({...lm, x: 1 - lm.x})))
-              : handResults.landmarks;
-
-            if (isASLEnabled && aslLandmarks.length > 0) {
-              const letter = classifyASL(aslLandmarks[0]);
+            // Recognize ASL letter
+            if (isASLEnabled && handResults.landmarks.length > 0) {
+              const handedness = handResults.handedness?.[0]?.[0]?.categoryName;
+              const letter = classifyASL(handResults.landmarks[0], handedness);
               setDetectedLetter(prev => prev !== letter ? letter : prev);
             } else {
               setDetectedLetter(null);
@@ -174,8 +172,18 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                 }
               }
 
-              ctx!.lineWidth = 4;
-              linkedFingersRef.current.forEach(i => {
+              // Line styling
+              ctx!.lineWidth = 10;
+              ctx!.lineCap = 'round';
+              ctx!.shadowBlur = 20;
+              
+              lineDashOffsetRef.current = (lineDashOffsetRef.current + 1) % 20;
+              ctx!.setLineDash([10, 10]);
+              ctx!.lineDashOffset = -lineDashOffsetRef.current;
+
+              const futuristicColors = ['#6366f1', '#a855f7', '#ec4899', '#22d3ee', '#10b981'];
+
+              linkedFingersRef.current.forEach((i, idx) => {
                 const h1 = hand1[i];
                 const h2 = hand2[i];
                 
@@ -185,11 +193,16 @@ export default function CameraView({onHome}: {onHome: () => void}) {
                 const y2 = h2.y * canvas.height;
                 
                 ctx!.beginPath();
-                ctx!.strokeStyle = `hsl(${(i * 20) % 360}, 100%, 50%)`;
+                ctx!.strokeStyle = futuristicColors[idx % futuristicColors.length];
+                ctx!.shadowColor = ctx!.strokeStyle;
                 ctx!.moveTo(x1, y1);
                 ctx!.lineTo(x2, y2);
                 ctx!.stroke();
               });
+              
+              ctx!.setLineDash([]); // Reset dash for subsequent drawing
+              ctx!.shadowBlur = 0; // Reset shadow blur
+              ctx!.shadowColor = 'transparent'; // Reset shadow color
             } else {
               linkedFingersRef.current = [];
             }
